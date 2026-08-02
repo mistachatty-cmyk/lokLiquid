@@ -1,0 +1,12 @@
+{
+  "name": "lokliquid",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic WebGL2 fluid field with collision-aware objects, studio capture, and beat-synced ad pipeline \u2014 Lok-Motion",
+  "type": "module",
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve .",
+    "build": "node build.mjs"
+  }
+}

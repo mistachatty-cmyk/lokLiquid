@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0A09">
+<title>lokLiquid</title>
+<style>
+:root{--ink:#EDE9E3;--dim:#77716A;--line:#26241F;--bg:#0B0A09;--acc:#C8FF4D;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  overscroll-behavior:none;position:fixed;inset:0;
+  -webkit-user-select:none;user-select:none}
+
+/* --- canvas stability: gestures never scroll the page --- */
+#stage{position:fixed;inset:0;touch-action:none;overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#overlay{pointer-events:none}
+
+.bar{position:fixed;top:0;left:0;right:0;z-index:5;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
+  display:flex;justify-content:space-between;align-items:center;
+  background:linear-gradient(to bottom,rgba(11,10,9,.85),transparent);pointer-events:none}
+.mark{font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+.mark b{font-weight:700}.mark span{color:var(--dim)}
+#status{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:5;
+  padding:10px 12px calc(6px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,rgba(11,10,9,.94) 60%,transparent);
+  display:grid;gap:8px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+button,select{font:inherit;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink);background:transparent;border:1px solid var(--line);
+  border-radius:3px;padding:9px 8px;flex:1;min-width:0}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:disabled{opacity:.4}
+select{text-transform:none;letter-spacing:0}
+
+/* brand strip */
+#brand{height:34px;display:flex;align-items:center;justify-content:center;gap:10px;
+  border-top:1px solid var(--line);transition:opacity .26s;font-size:9px;
+  letter-spacing:.2em;text-transform:uppercase}
+#brand b{font-weight:700}#brand span{color:var(--dim);letter-spacing:.08em;text-transform:none}
+
+/* sheets */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;
+  transition:opacity .22s;z-index:8}
+#scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:9;background:#121110;
+  border-top:1px solid var(--line);border-radius:14px 14px 0 0;
+  padding:14px 14px calc(16px + env(safe-area-inset-bottom));
+  transform:translateY(101%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+  max-height:78vh;overflow-y:auto;overscroll-behavior:contain}
+.sheet.open{transform:translateY(0)}
+.sheet h3{margin:0 0 12px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);display:flex;justify-content:space-between;align-items:center}
+.sheet h3 button{flex:0 0 auto;padding:5px 9px}
+
+.slider{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.slider label{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);width:56px}
+input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:22px;background:none}
+input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  margin-top:-6px;border-radius:50%;background:var(--ink)}
+.val{font-size:10px;color:var(--dim);width:34px;text-align:right;font-variant-numeric:tabular-nums}
+
+#symbolGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sym{padding:12px 4px;font-size:9px}
+
+#fontRow{display:flex;gap:6px;margin-bottom:10px}
+.chip{padding:9px 6px;font-size:11px;text-transform:none;letter-spacing:0}
+#textInput{width:100%;padding:11px;background:#0B0A09;border:1px solid var(--line);
+  border-radius:3px;color:var(--ink);font:inherit;font-size:14px;margin-bottom:9px}
+
+.layer{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.layer.sel{background:rgba(200,255,77,.05)}
+.layer .dot{flex:0 0 12px;width:12px;height:12px;padding:0;border-radius:50%;
+  border:1px solid var(--dim);background:transparent}
+.layer .dot.on{background:var(--acc);border-color:var(--acc)}
+.layer .eye{flex:0 0 26px;padding:2px;border:none;font-size:12px;color:var(--dim)}
+.layer .eye.on{color:var(--ink)}
+.layer .name{flex:1;font-size:11px;text-transform:none;letter-spacing:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer .mode{flex:0 0 82px;font-size:9px;padding:5px 4px}
+.layer .del{flex:0 0 30px;padding:5px;border:none;color:var(--dim)}
+.empty{padding:20px 4px;font-size:11px;color:var(--dim);text-transform:none;letter-spacing:0;line-height:1.6}
+#reactiveCount{font-size:9px;color:var(--dim);padding-top:9px}
+
+#galleryGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.cell{border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.cell img{width:100%;display:block;aspect-ratio:1;object-fit:cover}
+.cellbar{display:flex;align-items:center;gap:4px;padding:5px}
+.cellbar span{font-size:9px;color:var(--dim);flex:1;font-variant-numeric:tabular-nums}
+.mini{padding:5px 6px;font-size:8px;flex:0 0 auto}
+
+#toast{position:fixed;left:50%;bottom:118px;transform:translateX(-50%) translateY(12px);
+  z-index:20;background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:20px;
+  font-size:10px;letter-spacing:.04em;opacity:0;pointer-events:none;transition:all .24s;
+  max-width:86vw;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+#unsupported{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
+  background:var(--bg);padding:30px;text-align:center;font-size:12px;line-height:1.7}
+#helpPop{position:fixed;z-index:60;max-width:min(300px,84vw);background:#EDE9E3;color:#0B0A09;
+  padding:11px 13px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .16s;
+  box-shadow:0 8px 28px rgba(0,0,0,.5)}
+#helpPop.on{opacity:1;pointer-events:auto}
+#helpPop b{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px}
+#helpPop p{margin:0;font-size:12px;line-height:1.55;letter-spacing:0;text-transform:none;
+  font-family:system-ui,-apple-system,sans-serif}
+body.help-mode [data-help]{position:relative;outline:1px dashed rgba(200,255,77,.45);outline-offset:1px}
+body.help-mode #stage{opacity:.5}
+#helpBtn.on{background:#C8FF4D;color:#0B0A09;border-color:#C8FF4D}
+.swatch{width:30px;height:30px;border-radius:4px;border:1px solid #26241F;cursor:pointer}
+#swatches{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+#logoPreview{max-width:110px;max-height:52px;object-fit:contain;margin-bottom:10px;
+  background:#0B0A09;border:1px solid #26241F;border-radius:3px;padding:6px}
+#adPreview{width:100%;max-width:280px;display:block;margin:0 auto 12px;border:1px solid #26241F;
+  border-radius:6px;background:#0B0A09}
+.step{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:#C8FF4D;
+  margin:16px 0 8px;padding-top:12px;border-top:1px solid #26241F}
+.step:first-of-type{border-top:none;padding-top:0;margin-top:0}
+.tin{width:100%;padding:10px;background:#0B0A09;border:1px solid #26241F;border-radius:3px;
+  color:#EDE9E3;font:inherit;font-size:13px;margin-bottom:7px}
+.filebtn{display:block;flex:1;text-align:center;padding:9px 8px;font-size:10px;
+  letter-spacing:.09em;text-transform:uppercase;border:1px solid #26241F;border-radius:3px;cursor:pointer}
+.note,#shareNote{font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0;
+  padding-top:8px;line-height:1.5}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="fluid"></canvas>
+  <canvas id="overlay"></canvas>
+</div>
+
+<div class="bar">
+  <div class="mark"><b>lokLiquid</b> <span>/ lok-motion</span></div>
+  <div style="display:flex;align-items:center;gap:10px;pointer-events:auto"><div id="status">f0000 · seed 7</div><button id="helpBtn" title="Help mode — tap anything to learn what it does" style="flex:0 0 auto;width:26px;height:26px;padding:0;border-radius:50%;font-size:12px">?</button></div>
+</div>
+
+<div class="dock">
+  <div class="row">
+    <button data-help="mode-draw" data-mode="draw" class="on">Draw</button>
+    <button data-help="mode-pen" data-mode="pen">Pen</button>
+    <button data-help="mode-move" data-mode="move">Move</button>
+  </div>
+  <div class="row">
+    <button data-help="open-symbols" data-open="symbols">Symbols</button>
+    <button data-help="open-text" data-open="text">Text</button>
+    <button data-help="open-layers" data-open="layers">Layers</button>
+    <button data-help="open-studio" data-open="studio">Studio</button>
+    <button data-help="open-frames" id="openGallery">Frames</button>
+    <button data-help="open-import" data-open="import">Import</button>
+    <button data-help="open-auto" data-open="auto">Auto</button>
+    <button data-help="open-adstudio" data-open="adstudio" style="background:#C8FF4D;color:#0B0A09;border-color:#C8FF4D">Ad Studio</button>
+    <button data-help="open-tune" data-open="tune">Tune</button>
+  </div>
+  <div id="brand"></div>
+</div>
+
+<div id="scrim"></div>
+
+<!-- symbols -->
+<section class="sheet" data-sheet="symbols">
+  <h3>Symbols <button data-close>Close</button></h3>
+  <div id="symbolGrid"></div>
+</section>
+
+<!-- text -->
+<section class="sheet" data-sheet="text">
+  <h3>Text <button data-close>Close</button></h3>
+  <div id="fontRow"></div>
+  <input id="textInput" type="text" placeholder="Type something…" autocomplete="off">
+  <div class="row"><button id="addText">Place text</button></div>
+  <div class="note" style="padding-top:10px">
+    Text is a normal object — it can react to the fluid, be hidden but still
+    reactive (fluid reveals the hidden word), or float on top non-reactive.
+  </div>
+</section>
+
+<!-- layers -->
+<section class="sheet" data-sheet="layers">
+  <h3>Layers <button data-close>Close</button></h3>
+  <div id="layersList"></div>
+  <div id="reactiveCount"></div>
+  <div class="step" style="margin-top:14px">Interaction</div>
+  <div id="interactionRow" data-help="interaction" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+  <div id="interactionBlurb" class="note" style="margin-bottom:10px">Select an object to change how it meets the fluid.</div>
+  <div class="slider">
+    <label>Strength</label><input data-help="strength" id="objStrength" type="range" min="0" max="100" value="90" disabled><div class="val" id="objStrengthV">90%</div>
+  </div>
+  <div class="slider">
+    <label>Slip</label><input data-help="slip" id="fluidSlip" type="range" min="0" max="100" value="60"><div class="val" id="fluidSlipV">60%</div>
+  </div>
+  <div class="note" style="margin-bottom:6px">Slip is global — how freely fluid slides along every edge.</div>
+
+  <div class="step">Transform</div>
+  <div class="slider">
+    <label>Scale</label><input id="objScale" type="range" min="4" max="90" value="28" disabled><div class="val"></div>
+  </div>
+  <div class="slider">
+    <label>Rotate</label><input id="objRotate" type="range" min="-180" max="180" value="0" disabled><div class="val"></div>
+  </div>
+  <div class="slider">
+    <label>Opacity</label><input id="objOpacity" type="range" min="0" max="100" value="100" disabled><div class="val"></div>
+  </div>
+</section>
+
+<!-- studio -->
+<section class="sheet" data-sheet="studio">
+  <h3>Studio <button data-close>Close</button></h3>
+  <div class="slider">
+    <label>Format</label><select data-help="export-format" id="exportPreset"></select>
+  </div>
+  <div class="slider">
+    <label>Frames</label><input id="frameCount" type="range" min="12" max="180" value="60"><div class="val"></div>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="snapshot" id="snapBtn">Snapshot</button>
+    <button data-help="render-sequence" id="renderBtn">Render sequence</button>
+  </div>
+  <div class="slider">
+    <label>Video</label><input id="videoSeconds" type="range" min="2" max="15" value="5"><div class="val"></div>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="record-video" id="videoBtn">Record video</button>
+  </div>
+  <div class="note" id="videoNote" style="margin-bottom:12px"></div>
+
+  <div class="slider">
+    <label>Plot lines</label><input data-help="plot-lines" id="svgDensity" type="range" min="60" max="600" value="220"><div class="val"></div>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="export-svg" id="svgBtn">Export plotter SVG</button>
+  </div>
+  <div class="note" style="margin-bottom:12px">
+    A4 stroke paths in millimetres — pen plotter and riso separation ready.
+    Nothing rasterised.
+  </div>
+
+  <div class="row"><button data-help="copy-link" id="copyLink">Copy motion link</button></div>
+  <div id="shareNote" hidden>
+    This browser can't share files directly — frames will download instead.
+  </div>
+  <div class="note" style="padding-top:10px">
+    Sequences render offline from the seed, faster than real time — an export
+    is a regeneration, not a recording.
+  </div>
+</section>
+
+<!-- import -->
+<section class="sheet" data-sheet="import">
+  <h3>Import <button data-close>Close</button></h3>
+  <div class="row" style="margin-bottom:10px">
+    <label data-help="import-file" class="filebtn" for="importInput">Choose file (SVG, PNG, JPG, WebP, GIF)</label>
+    <input id="importInput" type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif" hidden>
+  </div>
+  <div class="slider">
+    <label>Threshold</label><input data-help="import-threshold" id="importThreshold" type="range" min="10" max="90" value="50">
+    <div class="val" id="importThresholdV">50%</div>
+  </div>
+  <div class="note" style="margin-bottom:8px">
+    SVG shapes import as vector objects. Raster images are thresholded into a
+    silhouette stencil so the fluid can actually collide with them — adjust
+    threshold for busy photos.
+  </div>
+  <div id="importStatus" class="note"></div>
+</section>
+
+<!-- auto (audio-reactive) -->
+<section class="sheet" data-sheet="auto" id="auto">
+  <h3>Auto <button data-close>Close</button></h3>
+  <div class="row" style="margin-bottom:8px">
+    <label data-help="audio-file" class="filebtn" for="audioFile">Choose audio file (MP3, WAV, M4A)</label>
+    <input id="audioFile" type="file" accept="audio/*" hidden>
+  </div>
+  <div class="row" style="margin-bottom:4px">
+    <input data-help="audio-url" id="audioUrl" type="text" placeholder="or paste a direct audio file URL…" autocomplete="off"
+      style="flex:1;padding:9px;background:#0B0A09;border:1px solid #26241F;border-radius:3px;color:#EDE9E3;font:inherit;font-size:12px">
+    <button id="audioUrlGo" style="flex:0 0 60px">Load</button>
+  </div>
+  <div class="note" style="margin-bottom:10px">
+    Link must point directly at an audio file with CORS enabled — not a
+    YouTube/Spotify/SoundCloud page. Browsers can't decode audio out of those
+    pages client-side.
+  </div>
+  <div id="audioStatus" class="note"></div>
+  <div id="audioBpm" style="font-size:9px;color:#77716A;margin-bottom:10px"></div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="audio-play" id="audioPlay" disabled>Play &amp; drive fluid</button>
+    <button id="audioStop">Stop</button>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="audio-render" id="audioAutoRender">Auto-render video from track</button>
+  </div>
+  <div class="note">
+    Bass drives splat strength and beat hits; treble thins the fluid so it
+    feels brighter on hi-hats. A hidden reactive object (if you've placed one)
+    flashes into view on strong beats. Auto-render captures live, since
+    audio timing isn't seed-reproducible — plain seed exports still are.
+  </div>
+</section>
+
+<!-- ad studio -->
+<section class="sheet" data-sheet="adstudio" id="adstudio">
+  <h3>Ad Studio <button data-close>Close</button></h3>
+
+  <canvas id="adPreview" width="360" height="640"></canvas>
+  <div class="slider">
+    <label>Scrub</label><input data-help="ad-scrub" id="adScrub" type="range" min="0" max="10" step="0.1" value="4"><div class="val"></div>
+  </div>
+
+  <div class="step">1 — Brand</div>
+  <img id="logoPreview" hidden alt="logo">
+  <div class="row" style="margin-bottom:8px">
+    <label data-help="brand-logo" class="filebtn" for="brandLogo">Upload logo (SVG or PNG)</label>
+    <input id="brandLogo" type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" hidden>
+  </div>
+  <div id="swatches"></div>
+  <div id="brandStatus" class="note" style="margin-bottom:8px"></div>
+  <input id="brandName" class="tin" type="text" placeholder="Client / brand name">
+  <input id="brandHeadline" class="tin" type="text" placeholder="Headline">
+  <input id="brandSubline" class="tin" type="text" placeholder="Subline (optional)">
+  <input id="brandCta" class="tin" type="text" placeholder="Call to action — e.g. Out now">
+  <input id="brandUrl" class="tin" type="text" placeholder="URL / handle">
+  <div class="row"><button data-help="brand-save" id="brandSave">Save brand</button></div>
+  <div id="brandList" style="margin-top:8px"></div>
+
+  <div class="step">2 — Track</div>
+  <div class="row" style="margin-bottom:8px">
+    <label data-help="ad-track" class="filebtn" for="adTrack">Upload the client's song (MP3, WAV, M4A)</label>
+    <input id="adTrack" type="file" accept="audio/*" hidden>
+  </div>
+  <div id="adTrackStatus" class="note" style="margin-bottom:8px"></div>
+  <div class="note">
+    The track is decoded once and its beat grid extracted as data, so the
+    render is driven by the music but stays reproducible.
+  </div>
+
+  <div class="step">3 — Template</div>
+  <div data-help="ad-template" id="templateRow" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+  <div id="templateBlurb" class="note" style="margin-bottom:10px"></div>
+  <div class="slider">
+    <label>Format</label>
+    <select data-help="export-format" id="adFormat">
+      <option value="instagram-story">Story / Reel / TikTok 9:16</option>
+      <option value="instagram-feed">Instagram Feed 1:1</option>
+      <option value="youtube">YouTube 16:9</option>
+      <option value="youtube-short">YouTube Short 9:16</option>
+    </select>
+  </div>
+  <div class="slider">
+    <label>Length</label><input data-help="ad-duration" id="adDuration" type="range" min="5" max="30" value="10">
+    <div class="val" id="adDurationV">10s</div>
+  </div>
+
+  <div class="step">4 — Deliver</div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="ad-render-silent" id="adRenderBtn" disabled>Render ad (silent, exact)</button>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <button data-help="ad-render-audio" id="adRenderAudioBtn" disabled>Render ad (with audio)</button>
+    <button data-help="ad-poster" id="adPosterBtn">Poster frame</button>
+  </div>
+  <div class="note">
+    <b>Silent</b> renders offline from the beat data — reproducible, faster
+    than realtime, no sound. <b>With audio</b> records in real time with the
+    track muxed in, which is what you hand a client to post. Poster frame
+    gives you a matching still for static placements.
+  </div>
+</section>
+
+<!-- gallery -->
+<section class="sheet" data-sheet="gallery">
+  <h3>Frames <button data-close>Close</button></h3>
+  <div id="galleryGrid"></div>
+</section>
+
+<!-- tune -->
+<section class="sheet" data-sheet="tune">
+  <h3>Tune <button data-close>Close</button></h3>
+  <div class="row" data-help="preset-fluid" style="margin-bottom:12px">
+    <button data-preset="ink">Ink</button>
+    <button data-preset="plasma">Plasma</button>
+    <button data-preset="smoke">Smoke</button>
+    <button data-preset="current" class="on">Current</button>
+  </div>
+  <div class="slider"><label>Curl</label><input data-help="curl" id="curl" type="range" min="0" max="50" value="30"><div class="val" id="curlv">30</div></div>
+  <div class="slider"><label>Fade</label><input data-help="fade" id="fade" type="range" min="1" max="30" value="9"><div class="val" id="fadev">0.90</div></div>
+  <div class="slider"><label>Radius</label><input data-help="radius" id="radius" type="range" min="5" max="80" value="25"><div class="val" id="radiusv">0.25</div></div>
+  <div class="row" style="margin-top:10px">
+    <button id="playBtn">Pause</button>
+    <button data-help="step" id="stepBtn">Step</button>
+    <button data-help="reseed" id="reseed">Reseed</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+</section>
+
+<div id="toast"></div>
+<div id="unsupported" hidden>
+  <div style="max-width:340px">
+    <div style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:18px">lokLiquid</div>
+    <div id="unsupportedMsg" style="font-size:13px;margin-bottom:14px"></div>
+    <div id="unsupportedHint" style="color:#C8FF4D;font-size:12px;line-height:1.8;margin-bottom:22px"></div>
+    <div id="unsupportedDetail" style="color:#4a4741;font-size:9px;line-height:1.6;word-break:break-word"></div>
+  </div>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
