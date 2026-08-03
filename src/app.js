@@ -388,7 +388,6 @@ function renderLayers() {
   const count = layer.objects.filter(o => o.reactive).length;
   $('#reactiveCount').textContent = `${Math.min(count, layer.maxReactive)}/${layer.maxReactive} reactive`;
 }
-renderLayers();
 
 // scale/rotate for selected
 $('#objScale').addEventListener('input', (e) => {
@@ -425,6 +424,7 @@ INTERACTION_KEYS.forEach(k => {
   };
   interactionRow.appendChild(b);
 });
+renderLayers();   // first render — needs interactionRow, so runs after it exists
 
 function syncInteraction() {
   const has = !!selected;

@@ -157,7 +157,7 @@ function escapeXml(s) {
 }
 
 /** One call: field -> plotter file. */
-function exportPlotterSVG(fluid, objectLayer, opts = {}) {
+export function exportPlotterSVG(fluid, objectLayer, opts = {}) {
   const raw = traceStreamlines(fluid, opts);
   const lines = raw.map(l => simplify(l, opts.tolerance ?? 0.0012));
   const svg = toSVG(lines, {

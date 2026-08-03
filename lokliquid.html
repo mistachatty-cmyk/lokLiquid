@@ -105,6 +105,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #unsupported{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
   background:var(--bg);padding:30px;text-align:center;font-size:12px;line-height:1.7;
   overflow:hidden}
+/* #unsupported{display:grid} outranks the UA [hidden]{display:none} rule on
+   specificity alone, so the hidden attribute was silently ignored and this
+   screen covered the app unconditionally. This restores it. */
+#unsupported[hidden]{display:none}
 /* CRT scanline ambient — technique from Lok-Motion's component set, lokLiquid's
    own palette. Slight on purpose: a status screen should still read as an
    error, not a splash. */
@@ -4211,7 +4215,6 @@ function renderLayers() {
   const count = layer.objects.filter(o => o.reactive).length;
   $('#reactiveCount').textContent = `${Math.min(count, layer.maxReactive)}/${layer.maxReactive} reactive`;
 }
-renderLayers();
 
 // scale/rotate for selected
 $('#objScale').addEventListener('input', (e) => {
@@ -4248,6 +4251,7 @@ INTERACTION_KEYS.forEach(k => {
   };
   interactionRow.appendChild(b);
 });
+renderLayers();   // first render — needs interactionRow, so runs after it exists
 
 function syncInteraction() {
   const has = !!selected;

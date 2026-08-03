@@ -8,12 +8,12 @@
  * through video, which a plain screen-recording approach loses.
  */
 
-function videoSupported() {
+export function videoSupported() {
   return typeof MediaRecorder !== 'undefined' &&
          typeof HTMLCanvasElement.prototype.captureStream === 'function';
 }
 
-function pickMimeType() {
+export function pickMimeType() {
   const candidates = [
     'video/mp4;codecs=avc1',          // Safari 17+ writes real mp4
     'video/webm;codecs=vp9',
@@ -26,7 +26,7 @@ function pickMimeType() {
   return '';
 }
 
-class VideoExporter {
+export class VideoExporter {
   constructor(fluid, objectLayer) {
     this.fluid = fluid;
     this.objects = objectLayer;

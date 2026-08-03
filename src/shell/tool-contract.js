@@ -17,7 +17,7 @@
  * @property {() => object} getShareState
  */
 
-class ToolDeck {
+export class ToolDeck {
   /**
    * @param {HTMLElement} root scroll-snap container
    * @param {Array<{id:string,label:string,create:()=>LokTool}>} defs
@@ -103,7 +103,7 @@ class ToolDeck {
 }
 
 /** Wraps LokFluid + ObjectLayer to satisfy the LokTool contract. */
-function makeFluidTool({ LokFluid, ObjectLayer, Capture, options = {} }) {
+export function makeFluidTool({ LokFluid, ObjectLayer, Capture, options = {} }) {
   let fluid = null, layer = null, capture = null;
   return {
     mount(canvas) {
