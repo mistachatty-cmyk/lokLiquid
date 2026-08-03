@@ -1,150 +1,176 @@
-# LAUNCH.md
+# lokLiquid
 
-Getting this from a zip to a live MVP.
+Deterministic GPU fluid field with a collision-aware object system, studio
+capture, and share-by-seed. Part of Lok-Motion.
 
----
+## Run
 
-## 1. Transfer to git
+Any static server (ES modules need one — `file://` won't work):
 
-The repo `mistachatty-cmyk/lokLiquid` exists but is private. If you can't
-open it in a browser, confirm you're signed into the account that owns it —
-GitHub renders a private repo you're not authenticated for as a 404, which
-looks exactly like it doesn't exist.
-
-```bash
-unzip lokliquid-repo.zip
-cd lokliquid
-
-git init
-git add -A
-git commit -m "feat: lokLiquid v1 — solver, objects, studio, ad pipeline"
-
-git remote add origin https://github.com/mistachatty-cmyk/lokLiquid.git
-git branch -M main
-git push -u origin main
+```
+npx serve .
+# or
+python3 -m http.server 8080
 ```
 
-If the push is rejected because the remote already has a commit:
+`lokliquid.html` is a pre-bundled single-file build that opens with no server.
 
-```bash
-git pull --rebase origin main
-git push -u origin main
+## Architecture
+
+```
+src/core/lok-fluid.js   solver — Stam stable fluids + vorticity confinement
+src/core/objects.js     LokObject model, symbols, pen, text, mask rasterizer
+src/core/capture.js     offline deterministic export, share presets, seed links
+src/app.js              shell — gestures, layers, studio, brand strip
+index.html              app
 ```
 
-### Or let Claude Code do it
+## Provenance
 
-From the unzipped folder:
+Clean-room. Written from Stam, *Stable Fluids* (SIGGRAPH 1999) and
+Fedkiw/Stam/Jensen, *Visual Simulation of Smoke* (2001). No third-party source.
+Ships proprietary.
 
-```bash
-claude
-```
+## The moats
 
-Then: *"Read CLAUDE.md, then initialize git and push this to
-github.com/mistachatty-cmyk/lokLiquid on main."*
+1. **Determinism as shareable state** — `{seed, config, objects}` reproduces a
+   motion exactly, anywhere. Share ~200 bytes, not a video.
+2. **One physics substrate** — symbols, pen shapes and text are the same
+   `LokObject` and collide through the same mask. Text can ride the current.
+3. **Reveal-through-motion** — an object can be invisible but reactive, so a
+   hidden word is revealed only by how the fluid parts around it.
 
-Claude Code will pick up `CLAUDE.md` automatically as project context on every
-session in this directory.
+## Object model
 
----
+Four independent states per object:
 
-## 2. Deploy
-
-No build step. Plain ES modules, static root.
-
-**Vercel:**
-```bash
-npx vercel
-```
-- Framework preset: **Other**
-- Build command: *(leave empty)*
-- Output directory: `.`
-
-**Or via dashboard:** import the GitHub repo, same settings. Pushes to `main`
-auto-deploy from then on.
-
-**Netlify / Cloudflare Pages:** same — no build command, publish directory `.`.
-
-### One gotcha
-Serve over **HTTPS**. `navigator.share()`, clipboard write, and
-`getUserMedia`-adjacent APIs are all secure-context only. Vercel gives you
-HTTPS by default; a bare IP or `http://` host will silently break sharing.
-
----
-
-## 3. Pre-launch checklist
-
-Ordered by how badly it hurts to skip.
-
-### Must do before showing anyone
-- [ ] **Test on a real iPhone in Safari.** Not the in-app browser. This is the
-      single biggest gap — the whole thing is syntax-verified but hasn't run on
-      physical hardware.
-- [ ] **Test on a real Android in Chrome.** Float texture support varies more
-      on Android than iOS; the probe screen will tell you if it fails.
-- [ ] Draw for 60 seconds, rotate the phone several times, background the app
-      and return. Watch for: black canvas (context loss), sluggishness (GPU
-      leak), stuck strokes (`pointercancel`).
-- [ ] Place a symbol, confirm the fluid **visibly** splits around it. If it
-      doesn't, the mask is stroking instead of filling.
-- [ ] Export a PNG, a video, and a plotter SVG. Open all three.
-- [ ] Copy a motion link, open it in a fresh tab, confirm identical motion.
-
-### Should do before a public launch
-- [ ] Run the Ad Studio flow end to end with a real client logo and track
-- [ ] Confirm the "with audio" export actually has audio (known weak point —
-      see CLAUDE.md known issues)
-- [ ] Check the help system: hover on desktop, long-press on mobile, `?` mode
-- [ ] Test with `prefers-reduced-motion` enabled
-- [ ] Try a deliberately huge SVG and a 10MB photo — confirm the size guards fire
-
-### Nice to have
-- [ ] Add a favicon and OG image (currently neither — links will preview blank)
-- [ ] Set `<meta name="description">` for search/social
-- [ ] Analytics, if you want any
-
----
-
-## 4. What to actually launch as MVP
-
-**Recommendation: launch the single-tool creative app, hold Ad Studio back.**
-
-The drawing → capture → export → share loop is complete, self-explanatory, and
-the parts most likely to break are the ones you can test in ten minutes. Ad
-Studio is the higher-value product but has the known audio-muxing weakness,
-and a client-facing tool that hands someone a silent "finished ad" damages
-trust more than a delayed launch does.
-
-Suggested sequencing:
-1. **Soft launch** the creative tool. Get it on real devices, fix what breaks.
-2. **Then** open Ad Studio, once audio muxing is verified on the devices your
-   clients actually use.
-
-If you want Ad Studio in the MVP anyway, at minimum relabel the silent export
-so nobody mistakes it for the deliverable — the current copy says so, but a
-client won't read it.
-
----
-
-## 5. First week after launch
-
-In priority order, from the roadmap:
-
-1. Fix whatever real-device testing surfaced (this will not be nothing)
-2. Wire `ToolDeck` — it's built and unused
-3. Move the brand strip to `public/brands.json` so it updates without a deploy
-4. Fix plotter export to trace actual mask geometry
-5. Start the `lok-fluid` npm extraction (see SPINOFFS.md — widest reach, most
-   reuse, and every improvement flows back here)
-
----
-
-## 6. Files in this repo
-
-| File | For |
+| State | Meaning |
 |---|---|
-| `CLAUDE.md` | Claude Code project context — read first |
-| `README.md` | Architecture, moats, API |
-| `ROADMAP.md` | Version plan and sequencing logic |
-| `SPINOFFS.md` | Extractable products and their roadmaps |
-| `COMMITS.md` | Suggested commit sequence |
-| `LAUNCH.md` | This file |
+| `visible` | drawn on screen |
+| `reactive` | fluid collides with it |
+| `mode` | `deflect` / `absorb` / `attract` |
+| `locked` | can't be dragged |
+
+Visible and reactive are independent — invisible-but-reactive is the reveal
+trick; visible-but-inert is a plain overlay.
+
+## Determinism contract
+
+- Fixed timestep (`config.fps`), never wall-clock
+- All ambient motion from a seeded mulberry32 PRNG
+- `seek(t)` / `stepFrame()` reproduce any frame
+- Export regenerates offline from the seed — it is not a screen recording
+
+## Bug guards already in place
+
+- `webglcontextlost` / `webglcontextrestored` rebuild
+- Explicit `dispose()` of every FBO on resize/reseed (no GPU leak)
+- `pointercancel` handled identically to `pointerup` (no stale stroke)
+- Multi-touch guard so a resting palm doesn't draw
+- `touch-action:none` + `overscroll-behavior:none` on stage AND body
+- `document.fonts.ready` awaited before text placement (mask/display match)
+- Single dirty flag drives mask + display together (never desync)
+- Open pen paths fall back from `absorb` to `deflect` (no undefined interior)
+- `navigator.canShare({files})` feature-detected, download fallback
+- Capture snapshots/restores live state; `toBlob` always awaited
+- Reactive object cap (12) to protect mobile GPUs
+- `visibilitychange` pauses the sim (battery/thermal)
+
+## Roadmap
+
+v1.1 — swipe deck for multiple tools, WebM export via `MediaRecorder`,
+full absorb/attract tuning, SVG stroke export for lokbook/plotter.
+Later — MP4 via ffmpeg.wasm, audio-reactive mode, OAuth direct posting.
+
+## v1.1 additions
+
+- `src/core/video.js` — MediaRecorder export driven by the **offline** loop via
+  `captureStream(0)` + `requestFrame()`, so a slow phone produces the same
+  video as a fast one. MP4 on Safari 17+, WebM elsewhere.
+- `src/core/plotter.js` — streamline tracing → Douglas-Peucker simplify →
+  millimetre SVG with one `<g>` per pen. Plotter and riso ready, no raster.
+- `src/shell/tool-contract.js` — `LokTool` interface plus `ToolDeck`, which
+  destroys off-window contexts rather than hiding them (Safari evicts the
+  oldest live WebGL context silently).
+
+## Troubleshooting
+
+**"lokLiquid needs WebGL2"** — almost always an in-app browser (Instagram,
+Claude, Slack, Messenger webviews) which blocks WebGL2. Tap `…` → Open in
+Safari. The unsupported screen now names the actual reason and prints the
+driver string underneath.
+
+## Ad Studio — client workflow
+
+The client-facing path. Four steps, one sheet:
+
+1. **Brand** — upload a logo (SVG or PNG). The palette is extracted from the
+   mark via median-cut and fed straight into the fluid's dye, so the client's
+   brand colours become the literal pigment in the water. Add headline,
+   subline, CTA, URL. Save the kit to reuse across campaigns.
+2. **Track** — upload the client's song. It's decoded once with
+   `OfflineAudioContext`, and its band energies + beat grid are extracted as
+   plain data (`analyzeTrack`). BPM is derived from the median inter-beat
+   interval.
+3. **Template** — five beat-synced layouts (`src/core/ad.js`). Cues snap to
+   the detected beat so type lands *on* the beat rather than drifting.
+4. **Deliver** — two export paths, labelled honestly:
+   - **Silent, exact** — offline render driven by the extracted timeline.
+     Reproducible, faster than realtime, no audio track.
+   - **With audio** — real-time capture with the track muxed via
+     `MediaStreamDestination`. Not reproducible, but has sound, which is what
+     a client posts.
+   - **Poster frame** — matching still for static placements.
+
+### Why two export paths
+
+`MediaRecorder` can mux audio, but only from a live stream. An offline render
+runs faster than realtime and has no audio clock to sync to, so it can't carry
+sound. Rather than silently shipping a mute "finished ad", both paths exist and
+the UI names the tradeoff.
+
+### Ad module map
+
+```
+src/core/brand.js       BrandKit, palette extraction, local persistence
+src/core/ad.js          templates + AdComposer overlay renderer
+src/core/ad-renderer.js analyzeTrack + offline/live render paths
+```
+
+## Help & discoverability
+
+Explanations reach every platform, since hover doesn't exist on phones:
+
+- **Desktop hover** — native `title` plus a styled popover after ~380ms
+- **Touch long-press** — 450ms hold on any control (cancelled if you drag)
+- **Help mode** — tap `?` in the top bar. Every explainable control gets a
+  dashed marker and a single tap explains it instead of firing it.
+- **Keyboard** — `?` toggles help mode, `Esc` dismisses
+
+Copy lives in one map (`src/core/help.js`, `HELP`) rather than scattered
+across `title` attributes, so wording stays consistent and is translatable
+later. A build check verifies every `data-help` key in the markup has a
+matching entry.
+
+## Interaction model
+
+How an object and the fluid affect each other is chosen by **behaviour**, not
+by raw physics parameters:
+
+| Preset | Feel |
+|---|---|
+| Rock | Hard edge, flow splits and races around |
+| Stone | Softer obstacle, parts flow without snapping it |
+| Sponge | Drinks the current, fluid pools against it |
+| Magnet | Pulls flow inward, colour clings to the outline |
+| Membrane | Barely there, nudges rather than blocks |
+| Ghost | Visible but no physics at all |
+
+Behind each preset: a collision `mode`, a `strength` (0–1, encoded into the
+mask's blue channel and read per-pixel in the gradient pass), and a `rim`
+thickness multiplier. Adjusting Strength directly switches the object to
+"Custom" rather than silently diverging from the named preset.
+
+**Slip** is global: how freely fluid slides along every edge. High slip glides
+like glass, low slip drags like cloth. It's part of the share state, so a
+motion link carries the interaction feel, not just the colours.
