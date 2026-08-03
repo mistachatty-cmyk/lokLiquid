@@ -103,7 +103,20 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 #unsupported{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
-  background:var(--bg);padding:30px;text-align:center;font-size:12px;line-height:1.7}
+  background:var(--bg);padding:30px;text-align:center;font-size:12px;line-height:1.7;
+  overflow:hidden}
+/* CRT scanline ambient — technique from Lok-Motion's component set, lokLiquid's
+   own palette. Slight on purpose: a status screen should still read as an
+   error, not a splash. */
+#unsupported::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.32) 0 1px,transparent 1px 3px)}
+#unsupported::after{content:'';position:absolute;left:0;right:0;height:38px;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(200,255,77,.09),transparent);
+  animation:uscan 3.4s linear infinite}
+@keyframes uscan{from{top:-40px}to{top:100%}}
+.uMark{font-size:11px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:18px;
+  animation:uflick 4.6s linear infinite}
+@keyframes uflick{0%,42%,44%,54%,100%{opacity:1}43%{opacity:.45}53%{opacity:.7}55%{opacity:.4}}
 #helpPop{position:fixed;z-index:60;max-width:min(300px,84vw);background:#EDE9E3;color:#0B0A09;
   padding:11px 13px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .16s;
   box-shadow:0 8px 28px rgba(0,0,0,.5)}
@@ -129,7 +142,8 @@ body.help-mode #stage{opacity:.5}
   letter-spacing:.09em;text-transform:uppercase;border:1px solid #26241F;border-radius:3px;cursor:pointer}
 .note,#shareNote{font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0;
   padding-top:8px;line-height:1.5}
-@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms !important}}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;
+  animation-duration:.01ms !important;animation-iteration-count:1 !important}}
 </style>
 </head>
 <body>
@@ -404,8 +418,8 @@ body.help-mode #stage{opacity:.5}
 
 <div id="toast"></div>
 <div id="unsupported" hidden>
-  <div style="max-width:340px">
-    <div style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:18px">lokLiquid</div>
+  <div style="max-width:340px;position:relative">
+    <div class="uMark">lokLiquid</div>
     <div id="unsupportedMsg" style="font-size:13px;margin-bottom:14px"></div>
     <div id="unsupportedHint" style="color:#C8FF4D;font-size:12px;line-height:1.8;margin-bottom:22px"></div>
     <div id="unsupportedDetail" style="color:#4a4741;font-size:9px;line-height:1.6;word-break:break-word"></div>

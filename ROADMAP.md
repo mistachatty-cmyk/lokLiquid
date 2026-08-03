@@ -153,6 +153,18 @@ here so the intent isn't lost between now and whenever it's picked up.
 
 Ideas worth keeping but not yet worth a milestone:
 
+- **Digital/Y2K motion treatment, expanded.** v1 is live: a CRT scanline
+  ambient + wordmark flicker on the WebGL2-unsupported status screen
+  (`#unsupported` in `index.html`), reusing the scanline technique from
+  Lok-Motion's component set (`lok-components.js`) with lokLiquid's own
+  palette rather than importing Lok-Motion's colors directly — motion
+  language shared, product identity stays per-app. Deliberately small.
+  Natural next steps if this direction is wanted further: apply the same
+  treatment to the boot/loading moment before the canvas initializes, or to
+  panel-open transitions; pull in more effects from `lok-components.js`
+  (glitch text, typewriter caret) for specific moments rather than
+  everywhere. Respects `prefers-reduced-motion` (see the global rule in
+  `index.html`) — keep that true of anything added here later.
 - **Audio-reactive mode** — splat force or curl driven by mic/track input
 - **Seed-as-collectible** — since a seed is already a shareable ~200-byte
   object, a lightweight "remix this seed" gallery is a small step from what
