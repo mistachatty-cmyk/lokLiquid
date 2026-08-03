@@ -1,247 +1,181 @@
-# lokLiquid — Roadmap
+# lokLiquid — Extractable Tools
 
-Status snapshot: v1 core is built (solver, objects, studio, share, video,
-plotter export). This document lays out what's shipped, what's next, and why,
-so priority calls are easy to make later without re-litigating them.
+What's already built that can become its own shippable thing, ranked by
+**speed to a quality release**, not by ambition. Each entry says what exists,
+what's actually missing, and where it goes over time.
 
-Every item below is filtered through the three moats — if a feature doesn't
-strengthen determinism-as-state, the shared physics substrate, or physical
-output, it's a nice-to-have, not a priority.
-
----
-
-## v1 — Shipped
-
-The complete loop: draw → capture → export → share, single tool, no deck.
-
-| Area | What's in |
-|---|---|
-| Solver | Stam stable fluids + vorticity confinement, fixed timestep, seeded PRNG, context-loss recovery, obstacle mask channel |
-| Objects | Symbols (12), pen tool with auto-close, text-as-object, deflect/absorb/attract, 4 independent states (visible/reactive/mode/locked) |
-| Studio | Offline deterministic frame capture, gallery, PNG export |
-| Video | MediaRecorder fed from the offline loop — device-speed-independent output, MP4/WebM |
-| Plotter | Streamline tracing → SVG, millimetre units, pen-separated groups |
-| Share | `navigator.share()` with download fallback, seed-link (~200 byte motion state) |
-| Shell | Canvas stability fixes, single-tool surface, brand strip |
-
-**Known gaps in v1** (intentional, not bugs):
-- Single tool only — no swipe deck live yet, though `ToolDeck` exists and is unused
-- No OAuth posting (YouTube, scheduled posts) — share sheet only
-- No audio-reactive mode
-- No collaborative/multiplayer sessions
-- Plotter export doesn't yet account for objects' actual mask geometry, only their transform boxes
+The filter throughout: a spin-off should be *mostly done already*. If it needs
+a new engine, it's not a spin-off — it's a new product wearing a spin-off's
+clothes.
 
 ---
 
-## v1.1 — Deck & Polish (next up)
+## Tier 1 — Ship in days
 
-**Goal:** more than one tool live in the product, and the video/plotter paths
-battle-tested on real devices rather than just in code review.
+### 1. `lok-fluid` — embeddable background component
+**Status: ~90% done.** `src/core/lok-fluid.js` is already standalone, has zero
+dependencies, and has a clean API (`splat`, `stroke`, `set`, `seek`,
+`stepFrame`, `getShareState`, `destroy`). It's the single most reusable thing
+in the repo.
 
-- **Wire `ToolDeck` into the shell.** It's built (`src/shell/tool-contract.js`)
-  but nothing calls it yet. Needs: a second tool (even a placeholder) to prove
-  the mount/destroy lifecycle under Safari's context cap, plus the edge-zone
-  swipe gesture from the shell spec (two-finger or edge-only, since one-finger
-  is claimed by drawing).
-- **Brand strip → live JSON.** Currently hardcoded `BRANDS` array in
-  `app.js`. Move to `public/brands.json` fetched with a short TTL so it
-  updates without a redeploy, per the shell spec.
-- **Object mask feeds plotter export.** Right now `toSVG()` draws objects
-  from their transform box, not their actual rasterized mask — fine for
-  symbols (they're simple paths anyway) but wrong for pen shapes with organic
-  curves. Trace the mask canvas contour instead of re-deriving from `points`.
-- **Device testing pass.** Everything above was built and syntax-verified but
-  not run on physical hardware. Priority devices: iPhone Safari (context loss,
-  touch gestures), older Android Chrome (float texture support varies more
-  there than on iOS), iPad (different aspect ratio assumptions in `_dims()`).
-- **Video export size/quality tuning.** `bitrate` is hardcoded to a 12–20Mbps
-  range — verify against actual WhatsApp/Discord caps at real durations rather
-  than the estimated `checkSize()` math.
+**The product:** a drop-in animated background for landing pages and hero
+sections. One script tag, one line of config. The pitch is that it's
+deterministic — the same seed renders identically for every visitor, so a
+designer can pick a look and know what ships.
 
----
+**What's missing:**
+- npm package scaffolding + ESM/UMD dual build
+- An `autoplay` mode that runs ambient motion with no interaction wired up
+- `IntersectionObserver` auto-pause when scrolled off-screen (battery)
+- A tiny docs page — which is really just the demo you already have
 
-## v1.2 — Second Tool
+**Roadmap:**
+- *v0.1* — npm publish, script-tag build, five presets, autopause
+- *v0.2* — React/Vue wrapper components, `prefers-reduced-motion` honoured by default
+- *v0.3* — theme-from-CSS-variables so it inherits a site's palette automatically
+- *v1.0* — the obstacle/mask system exposed, so a site's logo becomes an obstacle in its own hero
 
-**Goal:** prove the shared physics substrate (moat #2) with a second tool that
-reads the same velocity field, not just a second visual effect.
-
-Candidate: **`LokFlowField`** (already scoped in the shell spec) — advects SVG
-paths through the fluid's velocity field. This is the direct on-ramp to
-lokbook, and it's the cheapest possible second tool because it doesn't need
-its own solver — it reads `sampleVelocity()` from an existing `LokFluid`
-instance.
-
-- Define `LokFlowField` against the same `LokTool` contract
-- Decide: does it share a solver instance with the fluid tool (cheaper, tighter
-  coupling) or run its own (more isolated, doubles GPU cost)? Leaning shared —
-  it's the whole point of the substrate.
-- Deck now has a real second panel to test swipe/context-eviction against
+**Why it's first:** it's the widest possible distribution of the core asset,
+and every improvement to it improves lokLiquid too. Shared code, not a fork.
 
 ---
 
-## v1.3 — Object System Depth
+### 2. Silhouette Maker — image → reactive stencil
+**Status: ~80% done.** `src/core/import.js` already decodes any raster,
+thresholds it to a binary mask, and produces a usable stencil.
 
-Deferred from the original objects spec, now that the core model is proven:
+**The product:** drop in a photo or logo, get back a clean silhouette as PNG
+with alpha, or as an SVG outline. Useful well beyond fluid — stickers, cutouts,
+merch prep, plotter work.
 
-- **Multi-emitter choreography** — timed/sequenced splats instead of only
-  pointer-driven ones, so a designer can script an intro motion
-- **Bounds modes** — currently the domain edge is always a hard wall; add
-  wrap and open-edge modes
-- **Color-from-image** — sample a palette from an uploaded photo instead of
-  hand-picking one, feeds `config.palette`
-- **Full layers panel** — reordering via drag (currently only `reorder()`
-  exists in the model, no drag UI), lock toggle exposed in the panel (model
-  supports `locked`, UI doesn't yet)
-- **Attract/absorb tuning pass** — the two non-default collision modes work
-  but haven't been tuned against real content; deflect is the one that's been
-  visually verified
+**What's missing:**
+- Contour tracing to a real vector path (currently the stencil stays raster;
+  the marching-squares step is scoped but not written)
+- Edge smoothing + despeckle pass
+- Export UI (PNG-with-alpha and SVG)
 
----
-
-## v1.4 — Distribution
-
-**Goal:** close the gap between "share sheet" and "actually posted."
-
-- **YouTube OAuth posting** — separate milestone per the studio spec, needs
-  Google OAuth + YouTube Data API, real backend token storage (not just
-  client-side)
-- **Scheduled/queued posts** — if usage shows people exporting in batches and
-  posting later, a lightweight queue beats re-opening the share sheet each
-  time
-- Evaluate whether other platforms are worth direct OAuth vs. staying on
-  `navigator.share()` — the moat isn't in posting mechanics, so don't over-invest
-  here relative to the object system or a third tool
+**Roadmap:**
+- *v0.1* — upload, threshold slider, PNG-with-alpha export
+- *v0.2* — contour trace to SVG, simplify tolerance control
+- *v0.3* — multi-level posterize (2–5 tone separations, which is exactly what riso printing wants)
+- *v0.4* — batch mode for a folder of images
 
 ---
 
-## Later / Unscheduled
+### 3. Track Analyzer — audio → beat grid JSON
+**Status: ~85% done.** `analyzeTrack()` in `src/core/ad-renderer.js` already
+does offline decode, three-band energy extraction, percentile normalization,
+beat flagging, and BPM estimation. It returns clean data.
 
-Ideas worth keeping but not yet worth a milestone:
+**The product:** upload a track, get a JSON beat map — BPM, beat timestamps,
+per-frame band energies. For motion designers scripting to music, or as a
+free utility that feeds people into the main tool.
 
-- **Audio-reactive mode** — splat force or curl driven by mic/track input
-- **Seed-as-collectible** — since a seed is already a shareable ~200-byte
-  object, a lightweight "remix this seed" gallery is a small step from what
-  exists, not a new system
-- **Haptics on splat** — mobile-only nicety
-- **Low-power auto-downscale** — detect thermal throttling, drop
-  `simResolution`/`dyeResolution` automatically rather than making the user
-  find the Tune sheet
-- **Export watermark toggle** — depends on whether free vs. paid tiers become
-  a thing; no product decision yet, don't build ahead of it
-- **ffmpeg.wasm MP4 fallback** — only needed for browsers where native
-  MediaRecorder can't produce MP4 (most non-Safari browsers land on WebM,
-  which is broadly acceptable for the target platforms already). ~30MB
-  download, so only worth it if a real user complaint shows up asking for MP4
-  specifically outside Safari.
+**What's missing:**
+- A JSON/CSV download button (the data structure is already right)
+- A waveform + beat marker visualization
+- Downbeat/bar detection (currently beats only, not "which beat is the 1")
 
----
-
-## Sequencing logic
-
-The order above is deliberately not "easiest first." It's:
-
-1. **v1.1** hardens what's built before anything new sits on top of it —
-   shipping a deck on an untested video export would compound bugs.
-2. **v1.2** is the earliest point the shared-substrate moat becomes visible
-   to a user rather than just true in the code.
-3. **v1.3** is depth on a system that's already proven, lower architectural
-   risk than a new tool.
-4. **v1.4** is explicitly de-prioritized relative to product moats — posting
-   mechanics are commodity work and easy to add whenever, so they shouldn't
-   compete for time against anything that makes the tool itself better.
-
-If priorities shift, the one hard dependency in this order is that **v1.2
-needs v1.1's `ToolDeck` wiring** — everything else can reorder freely.
+**Roadmap:**
+- *v0.1* — upload, BPM readout, JSON export
+- *v0.2* — waveform view with beat markers, manual tap-to-correct BPM
+- *v0.3* — bar/downbeat detection, time signature guess
+- *v0.4* — After Effects keyframe export (`.jsx`), which is the format that makes motion designers actually adopt it
 
 ---
 
-## v1.0.1 — Import & Audio-Reactive Auto-Motion (added, shipped)
+## Tier 2 — Ship in a couple of weeks
 
-Two features, researched and built ahead of the v1.1/v1.2 sequence above
-because they were explicitly requested. Notes here for why they were built
-the way they were, and what's a real limitation vs. a v1.2+ improvement.
+### 4. Flow Plotter — generative SVG for pen plotters
+**Status: ~70% done.** `src/core/plotter.js` traces streamlines, simplifies
+with Douglas-Peucker, and emits millimetre SVG with per-pen groups. That's the
+hard part.
 
-### Bring-your-own shape (SVG / PNG / JPG / WebP / GIF)
+**The product:** a generative art tool for the AxiDraw / plotter / riso
+community — a small, vocal, underserved audience that pays for good tools.
 
-**Tech used:** the browser's native `Path2D()` constructor already parses SVG
-path syntax directly — no parser dependency needed. `src/core/import.js` uses
-`DOMParser` to pull `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`,
-`<polyline>`, `<line>` out of an uploaded SVG, converts the primitive shapes
-to path-data strings, and normalizes the combined bounding box to the same
-0..1 space every other object lives in. It becomes a new `LokObject` kind
-(`'svg'`) that flows through the existing pipeline — same transform, same
-mode toggle, same mask rasterization.
+**What's missing:**
+- Paper size presets (A3/A4/Letter, portrait/landscape) — currently A4 hardcoded
+- Multi-pen colour assignment UI (the `pens` array exists, no UI drives it)
+- Travel-path optimization (reorder lines to minimize pen-up movement — a real
+  quality issue on long plots)
+- Preview showing plot time estimate
 
-Raster images (PNG/JPG/WebP/GIF) go a different route since there's no vector
-to extract: `importRasterFile()` decodes the image via `createImageBitmap`,
-thresholds it into a binary luminance mask (adjustable in the Import sheet),
-and the result is stamped into both the collision mask and the display layer
-as a bitmap rather than a path — that's the new `'stencil'` object kind.
-Works well for logos and high-contrast silhouettes; a busy photo will need
-threshold tuning to get a clean shape.
+**Roadmap:**
+- *v0.1* — paper presets, density/simplify controls, single-pen SVG
+- *v0.2* — multi-pen separation UI, travel optimization
+- *v0.3* — seed gallery, since determinism means a plot is reproducible from a
+  200-byte link — genuinely novel for this community
+- *v0.4* — HPGL export for older plotters, G-code for pen-mounted CNC
 
-**Known limitation:** SVG and stencil objects are excluded from the seed-link
-share state (`toJSON()` flags them `excluded: true`). A raw bitmap or an
-arbitrary path array doesn't fit the ~200-byte motion-link moat — including
-them would mean the "link" is actually a multi-kilobyte payload, which
-defeats the point. They persist in-session and in exported files/video, just
-not in the compact link. If this turns out to matter, the fix is a small
-asset-hosting step (upload once, reference by ID) rather than cramming pixels
-into a URL.
+**Note:** this one has the strongest moat (moat #3) and the smallest audience.
+Good for credibility and word-of-mouth, not for volume.
 
-### Audio-reactive auto-motion (mp3 / direct link)
+---
 
-**Tech used:** Web Audio API's `AnalyserNode` off a `MediaElementAudioSourceNode`
-— the standard, dependency-free way to get real-time frequency data in a
-browser. `src/core/audio.js` splits the spectrum into bass/mid/treble bands
-each frame, drives `curl` and `velocityDissipation` continuously from overall
-loudness, and fires stronger splats on detected beats. Beat detection is
-energy-based: compare instantaneous bass energy against a rolling local
-average and fire when it spikes past a threshold — the same technique used by
-`web-audio-beat-detector` and similar libraries, implemented directly rather
-than adding a dependency since it's ~15 lines. A separate one-shot BPM
-estimate runs via `OfflineAudioContext` + autocorrelation over a low-pass
-energy envelope when a file is uploaded, shown as a rough tempo readout.
+### 5. Beat-Synced Ad Maker — the client tool, standalone
+**Status: ~75% done.** `brand.js` + `ad.js` + `ad-renderer.js` are the whole
+pipeline: logo → palette, track → beat grid, template → timed cues, render →
+video.
 
-If a hidden reactive object exists (the reveal-through-motion trick from the
-objects system), strong beats now flash it into view automatically — audio
-driving the reveal primitive, not just the fluid.
+**The product:** the Ad Studio flow as its own focused product, without the
+drawing tools. Upload logo, upload track, pick template, get a spot.
 
-**Scope decision — direct files/URLs only, not arbitrary links.** This is the
-one place research changed the plan. A "paste any link" UI implies YouTube,
-Spotify, SoundCloud page URLs — none of those are decodable client-side.
-Web Audio can only analyze what it can get into an `AudioBuffer` or
-`MediaElementSource`, and that requires either a local file or a CORS-enabled
-*direct* audio file URL. Extracting audio from a YouTube page isn't a
-front-end feature — it needs either a platform's official API (SoundCloud
-has one; YouTube's ToS prohibits extraction) or a server-side download step,
-which is a backend project with real legal surface, not something to bolt
-onto a client-side tool. The Auto sheet says this explicitly rather than
-accepting a link and failing silently later.
+**What's missing:**
+- More templates (five now; this category lives or dies on template quality)
+- Template preview thumbnails rather than text labels
+- Reliable audio muxing — the current live-capture path works but is the
+  weakest link (see the known-issues note in the launch doc)
+- Multi-format batch export (render 9:16 + 1:1 + 16:9 in one pass, since the
+  overlay compositor already re-renders per aspect without re-simulating)
 
-**Architectural note — this breaks the determinism moat, on purpose, for this
-one mode.** Every other export in lokLiquid regenerates offline from a seed,
-bit-for-bit reproducible. Audio-driven motion can't work that way — it
-depends on live playback timing syncing to a real audio clock, which isn't
-something `stepFrame()` can fast-forward through deterministically without a
-full offline audio-rendering pipeline (`OfflineAudioContext` can decode and
-analyze audio offline in principle — a real v1.2+ path if audio-driven seed
-links turn out to matter — but wasn't in scope here). So audio-driven export
-uses a new `recordLive()` capture path in `video.js` that captures the canvas
-in real time via `captureStream(fps)`, separate from the deterministic
-`record()` path used everywhere else. Plain seed exports are still exactly
-reproducible; only the audio-driven ones aren't, and the UI says so.
+**Roadmap:**
+- *v0.1* — current flow, cleaned up, 8–10 templates
+- *v0.2* — batch multi-format export, template thumbnails
+- *v0.3* — brand kit sharing via link so a client can self-serve
+- *v0.4* — server-side render for reliable audio muxing (the honest fix)
 
-### What this changes in the sequencing above
+---
 
-- **v1.1's device testing pass** now needs to cover file input, drag/drop,
-  and `getUserMedia`-adjacent permissions (audio autoplay policies vary by
-  browser and need a user gesture — the Play button satisfies that, but it's
-  worth explicit testing on iOS Safari specifically).
-- **A real v1.2+ candidate, not yet scheduled:** offline audio rendering via
-  `OfflineAudioContext` so an audio-driven piece *could* become seed-reproducible
-  after all — decode the track once, extract the full band/beat timeline as
-  data, and feed that through the existing deterministic `stepFrame()` loop
-  instead of live analysis. This would close the determinism gap above. Worth
-  doing if audio-driven pieces turn out to be popular enough that people want
-  to share them as seed links, not just export video.
+## Tier 3 — Real projects, not extractions
+
+### 6. `lok-help` — the cross-platform help layer
+`src/core/help.js` is genuinely generic — hover, long-press, and help-mode in
+~200 lines with no dependencies. Could be a small open-source package.
+
+**Why it's worth doing anyway:** open-sourcing a small, well-made utility is
+cheap credibility, and it costs almost nothing since the code exists. Not a
+revenue path. Do it when there's a spare afternoon, not on a schedule.
+
+### 7. Seed-link pattern — determinism as a library
+The `{seed, config} → 200 bytes → identical render` pattern (`capture.js`)
+generalizes to any generative tool. This is a *technique*, not a product, and
+probably belongs in a blog post rather than a package.
+
+---
+
+## What NOT to extract
+
+- **The object/collision system** — it only makes sense inside a fluid sim.
+  Extracting it produces a worse version of a physics engine.
+- **The tool deck** — it's shell infrastructure. It has no value without tools
+  to put in it.
+- **Anything requiring a backend** — YouTube posting, server-side render,
+  hosted brand kits. These are real projects with real ops cost. They aren't
+  spin-offs and shouldn't be scoped as if they were.
+
+---
+
+## Suggested order
+
+1. **`lok-fluid` npm package** — widest reach, most reuse, improves the parent
+2. **Track Analyzer** — smallest gap between "exists" and "shippable"
+3. **Silhouette Maker** — genuinely useful outside this niche
+4. **Flow Plotter** — strongest differentiation, smallest audience
+5. **Ad Maker standalone** — highest revenue potential, but wait until the
+   audio muxing is solid, because a client-facing tool that ships silent video
+   is worse than no tool
+
+The first three share code with the main app rather than forking it. Keep
+them in one repo as separate entry points until there's a concrete reason to
+split — a premature monorepo split is a lot of maintenance for no user benefit.

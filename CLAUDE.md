@@ -1,11 +1,184 @@
-node_modules/
-dist/
-.DS_Store
-.env
-.env.*
-*.local
+# CLAUDE.md
 
-# generated single-file build — regenerate with `npm run build`
-# (kept tracked intentionally so the repo has a no-server demo; remove the
-#  '#' below if you'd rather it be build-only)
-# lokliquid.html
+Context for Claude Code working in this repo. Read this before making changes.
+
+## What this is
+
+lokLiquid — a deterministic WebGL2 fluid simulation with a collision-aware
+object system, studio capture, and a client-facing ad pipeline. Part of
+Lok-Motion. Proprietary.
+
+**Provenance matters here.** The solver is clean-room, written from Stam's
+*Stable Fluids* (SIGGRAPH 1999) and Fedkiw/Stam/Jensen's *Visual Simulation of
+Smoke* (2001). No third-party source was copied. Do not paste in code from
+fluid-sim repos, gists, or shader collections — it compromises the licensing
+position. If a technique is needed, implement it from the published method.
+
+## Run it
+
+```bash
+npx serve .          # ES modules need a server; file:// will not work
+```
+
+`lokliquid.html` at the repo root of the build output is a pre-bundled
+single-file version that opens without a server. It is **generated**, not
+edited by hand — see "Bundling" below.
+
+**WebGL2 required.** In-app browsers (Instagram, Slack, Claude, Messenger
+webviews) block WebGL2 and will show the unsupported screen. Test in real
+Safari/Chrome/Firefox.
+
+## Architecture
+
+```
+src/core/lok-fluid.js     solver — shaders, FBOs, fixed timestep, seeded PRNG
+src/core/objects.js       LokObject model, symbols, pen, text, mask rasterizer
+src/core/capture.js       offline frame export, share presets, seed links
+src/core/video.js         MediaRecorder — offline (record) + live (recordLive)
+src/core/plotter.js       streamline trace → simplify → millimetre SVG
+src/core/import.js        SVG parse + raster→stencil
+src/core/audio.js         live audio-reactive driver (AnalyserNode)
+src/core/brand.js         BrandKit, palette extraction, local persistence
+src/core/ad.js            ad templates + overlay compositor
+src/core/ad-renderer.js   analyzeTrack (offline) + ad render paths
+src/core/help.js          cross-platform help layer + HELP copy map
+src/shell/tool-contract.js LokTool interface + ToolDeck (BUILT, NOT WIRED)
+src/app.js                shell — gestures, panels, all UI wiring
+index.html                markup + styles (single file, no CSS build)
+```
+
+## Non-negotiable invariants
+
+Break these and things fail in ways that are hard to trace.
+
+1. **Determinism.** The sim is driven by a fixed timestep (`config.fps`) and a
+   seeded PRNG (`makeRng`). Never introduce `Math.random()`, `Date.now()`, or
+   wall-clock time into the simulation path. `start()` uses an accumulator so
+   dropped frames don't change the result. The only intentional exception is
+   the *live* audio driver (`audio.js`) and `recordLive()` — both are labelled
+   as non-reproducible in the UI.
+
+2. **One dirty flag.** `ObjectLayer.dirty` drives *both* the collision mask and
+   the display raster. Do not split them into two flags — they will desync and
+   objects will visually move a frame before (or after) the fluid responds.
+
+3. **Never rasterize per sim step.** Masks rebuild only when `dirty` is set
+   (create/edit/transform). The mask upload is gated by `_maskDirty` in the
+   solver. This is the difference between 60fps and 12fps on a phone.
+
+4. **Dispose GL resources.** `resize()` and `reset()` call `_disposeTargets()`.
+   Any new FBO/texture/program must be disposed too, or rotating the phone a
+   few times leaks GPU memory until the tab dies.
+
+5. **Overlays composite at export time.** Text and ad overlays are drawn onto
+   the output frame in `capture.js`/`ad.js` — never baked into the dye. This is
+   what lets one simulation re-render at any aspect ratio without re-simulating.
+
+6. **`await` every `toBlob`.** Fire-and-forget produces out-of-order frames
+   under load.
+
+## The three moats
+
+Use these as the filter for feature decisions:
+
+1. **Determinism as shareable state** — `{seed, config}` in ~200 bytes
+   reproduces a motion exactly, anywhere, forever. Never break this for
+   convenience.
+2. **One physics substrate** — symbols, pen shapes, text, and imports are all
+   `LokObject` and collide through the same mask. Tools compose.
+3. **Physical output** — SVG stroke paths for plotter/riso. Screen-only tools
+   structurally can't cross into physical output.
+
+## Mask encoding
+
+The collision mask is an RGBA canvas uploaded to the solver:
+
+| Channel | Meaning |
+|---|---|
+| R | solidity — 255 = solid |
+| G | mode — 0 deflect, 128 absorb, 255 attract |
+| B | strength 0–255 (how hard it pushes back) |
+| A | 255 |
+
+Read per-pixel in `F_DIVERGENCE`, `F_PRESSURE`, `F_GRADIENT`, `F_ADVECT`,
+`F_VORTICITY`, `F_SPLAT`. If you add a mask channel, update every pass that
+samples it or behaviour will be inconsistent between passes.
+
+## Bundling
+
+`lokliquid.html` is generated by inlining all modules into `index.html`.
+There is no build tool — the bundler is a ~15-line Python script that strips
+`import`/`export` statements and concatenates in dependency order.
+
+If you add a module, add it to the file list **in dependency order** (a module
+must come after anything it references at module scope). Then verify:
+
+```bash
+node --check /tmp/bundle.mjs        # syntax
+# and confirm no duplicate top-level declarations across modules
+```
+
+Consider replacing this with esbuild if the module count grows much past ~15.
+It was kept dependency-free deliberately, but that tradeoff has a limit.
+
+## Conventions
+
+- **No dependencies.** Everything is vanilla ES modules. Adding one needs a
+  real justification — beat detection, SVG parsing, and palette extraction
+  were all implemented directly (each ~20-60 lines) rather than pulling
+  packages.
+- **No localStorage in the sim path.** `brand.js` uses it for brand kits with
+  a `safeStore()` guard and honest failure when quota is hit.
+- **Comments explain *why*, not *what*.** Existing comments flag non-obvious
+  constraints (Safari context limits, `pointercancel` behaviour, why absorb
+  falls back on open paths). Match that register.
+- **UI copy lives in `HELP`** (`src/core/help.js`), not scattered `title`
+  attributes. Every `data-help` key must have a matching entry.
+
+## Known state
+
+**Repo restored (see ROADMAP.md).** An earlier file-transfer step scrambled
+every filename against its content (21-way rotation). It's been fully
+restored and verified — rebuilding `lokliquid.html` from `src/` reproduces
+the previously committed bundle byte-for-byte. If you ever see a module
+whose content doesn't match its own doc comment, stop and check for the same
+class of corruption before editing — don't assume the filename is correct.
+
+**Wired and working:** solver, objects, symbols, pen, text, import, audio
+driver, brand kit, ad templates, ad render (both paths), video, plotter, help,
+interaction presets.
+
+**Built but NOT wired:** `src/shell/tool-contract.js` — `ToolDeck` and
+`makeFluidTool`. This is intentional; the deck needs a second tool to be worth
+wiring, and wiring it against a single panel would be untested code pretending
+to work. This is the v1.1 task.
+
+**Not yet tested on physical hardware.** Everything has been syntax-verified
+and reviewed but not run on a real device. Highest-risk areas: iOS Safari
+context loss, audio autoplay policy, `MediaRecorder` codec differences, and
+float texture support on older Android.
+
+## Known issues worth fixing early
+
+1. **Audio muxing is the weakest link.** `renderLiveWithAudio()` creates a
+   `MediaElementSource` from the audio element, but an element can only have
+   one such source for its lifetime. If the live `AudioDriver` already claimed
+   it, the export records silent. The code catches this and reports it
+   honestly, but the real fix is either a shared audio graph or a server-side
+   render.
+2. **Plotter export ignores object mask geometry** — it draws objects from
+   their transform box rather than tracing the actual rasterized mask. Fine for
+   symbols, wrong for organic pen shapes.
+3. **`seek(t)` is O(frames)** — it replays from zero. Fine for short scrubs,
+   slow for long ones.
+4. **SVG/stencil objects are excluded from seed links** (`toJSON()` returns
+   `{excluded: true}`). A bitmap doesn't fit in 200 bytes. Fixing this properly
+   means asset hosting, not URL cramming.
+
+## Testing checklist for any solver change
+
+- Same seed produces identical output across two page loads
+- Rotate the phone 5+ times, check GPU memory doesn't climb
+- Background the app and return — canvas should recover, not go black
+- Draw with a second finger resting on screen — should not trigger navigation
+- Objects visibly split the flow (if not, check mask fill vs. stroke)
