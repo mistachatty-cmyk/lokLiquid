@@ -13,18 +13,26 @@ looks exactly like it doesn't exist.
 
 No build step. Plain ES modules, static root.
 
-**Vercel:**
+**Vercel:** `vercel.json` at repo root pins framework to none, build command to
+none, and output directory to `.`, so it deploys correctly with zero manual
+dashboard configuration — no need to override Vercel's auto-detection.
 ```bash
-npx vercel
+npx vercel        # preview
+npx vercel --prod # production
 ```
-- Framework preset: **Other**
-- Build command: *(leave empty)*
-- Output directory: `.`
+Or import the GitHub repo via the dashboard — same config is picked up
+automatically from `vercel.json`. Pushes to `main` auto-deploy from then on.
 
-**Or via dashboard:** import the GitHub repo, same settings. Pushes to `main`
-auto-deploy from then on.
+`vercel.json` also sets a few baseline response headers (`X-Content-Type-Options`,
+`Referrer-Policy`, and a `Permissions-Policy` disabling camera/mic/geolocation,
+none of which lokLiquid uses). No CSP is set — the app relies on inline
+`<style>`/`<script type="module">` in `index.html`, and a strict CSP would need
+those specifically allowed; add one deliberately if that becomes a requirement,
+don't bolt on a default.
 
 **Netlify / Cloudflare Pages:** same — no build command, publish directory `.`.
+(`vercel.json` is Vercel-specific; these platforms would need their own
+equivalent config file if the same zero-touch setup is wanted there.)
 
 ### One gotcha
 Serve over **HTTPS**. `navigator.share()`, clipboard write, and
